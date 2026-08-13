@@ -13,6 +13,17 @@ async function checkAccount(page, bankId, bankName, rekening) {
     console.log("=================================");
 
     await page.locator("#bank_id").waitFor();
+    console.log("URL:", page.url());
+
+await page.screenshot({
+  path: "error.png",
+  fullPage: true
+});
+
+require("fs").writeFileSync(
+  "error.html",
+  await page.content()
+);
 
     await page.locator("#bank_id").selectOption(bankId);
     const selected = await page.locator("#bank_id").inputValue();

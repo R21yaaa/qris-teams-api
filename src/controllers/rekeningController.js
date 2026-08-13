@@ -1,52 +1,10 @@
-const qrisService = require("../services/qrisService");
-
 async function cekRekening(req, res) {
 
-    try {
+    return res.status(503).json({
+        status: false,
+        maintenance: true,
+        message: "Service sedang dalam maintenance. Silakan coba kembali nanti."
+    });
 
-        const {
-
-            bankId,
-
-            bankName,
-
-            rekening
-
-        } = req.body;
-
-        const result = await qrisService.cek(
-
-            bankId,
-
-            bankName,
-
-            rekening
-
-        );
-        console.log(result);
-
-        res.json(result);
-
-    }
-
-    catch (err) {
-
-        console.error(err);
-
-        res.status(500).json({
-
-            status: false,
-
-            error: err.message
-
-        });
-
-    }
-
+    // kode lama di bawah ini
 }
-
-module.exports = {
-
-    cekRekening
-
-};

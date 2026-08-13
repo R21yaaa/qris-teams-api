@@ -3,45 +3,171 @@ const checkAccount = require("./checkAccount");
 
 let page = null;
 let browser = null;
+let isLoggingIn = false;
+
+// Queue agar satu browser tidak dipakai dua request sekaligus
+let queue = Promise.resolve();
 
 async function start() {
 
-    if (page) {
-        console.log("QRIS sudah login.");
-        return;
+    if (
+        page &&
+        browser &&
+        !page.isClosed()
+    ) {
+        return page;
     }
 
-    console.log("Login ke QRIS...");
+    if (isLoggingIn) {
 
-    const result = await login();
-
-    browser = result.browser;
-    page = result.page;
-
-    console.log("Membuka halaman Check Account...");
-
-    await page.goto(
-        "https://qrisajaib.com/check-account",
-        {
-            waitUntil: "networkidle"
+        while (isLoggingIn) {
+            await new Promise(resolve =>
+                setTimeout(resolve, 300)
+            );
         }
-    );
 
-    console.log("Check Account siap.");
+        return page;
+    }
+
+    isLoggingIn = true;
+
+    try {
+
+        console.log("==============================");
+        console.log("START QRIS BACKEND");
+        console.log("==============================");
+
+        const result = await login();
+
+        browser = result.browser;
+        page = result.page;
+
+        console.log(
+            "✅ QRIS BACKEND READY"
+        );
+
+        return page;
+
+    } finally {
+
+        isLoggingIn = false;
+
+    }
 }
 
-async function cek(bankId, bankName, rekening) {
+async function resetSession() {
 
-    if (!page) {
-        throw new Error("QRIS belum login.");
-    }
-
-    return await checkAccount(
-        page,
-        bankId,
-        bankName,
-        rekening
+    console.log(
+        "⚠️ RESET QRIS BACKEND SESSION"
     );
+
+    try {
+
+        if (browser) {
+            await browser.close();
+        }
+
+    } catch (err) {}
+
+    browser = null;
+    page = null;
+}
+
+async function cek(
+    bankId,
+    bankName,
+    rekening
+) {
+
+    // Request masuk antrean
+    const previous = queue;
+
+    let release;
+
+    queue = new Promise(resolve => {
+        release = resolve;
+    });
+
+    await previous;
+
+    try {
+
+        if (
+            !page ||
+            !browser ||
+            page.isClosed()
+        ) {
+            await start();
+        }
+
+        // Pastikan session benar-benar masih di halaman check account
+        if (
+            page.url().includes("/login")
+        ) {
+
+            console.log(
+                "⚠️ QRIS BACKEND LOGOUT"
+            );
+
+            await resetSession();
+            await start();
+        }
+
+        // Pastikan form tersedia
+        await page.locator("#bank_id").waitFor({
+            state: "visible",
+            timeout: 15000
+        });
+
+        return await checkAccount(
+            page,
+            bankId,
+            bankName,
+            rekening
+        );
+
+    } catch (err) {
+
+        console.log(
+            "❌ QRIS ERROR:",
+            err.message
+        );
+
+        /*
+         * Jangan langsung login ulang
+         * hanya karena error biasa.
+         *
+         * Cek apakah memang logout.
+         */
+
+        if (
+            page &&
+            !page.isClosed() &&
+            page.url().includes("/login")
+        ) {
+
+            console.log(
+                "⚠️ SESSION BENAR-BENAR LOGOUT"
+            );
+
+            await resetSession();
+            await start();
+
+            return await checkAccount(
+                page,
+                bankId,
+                bankName,
+                rekening
+            );
+        }
+
+        throw err;
+
+    } finally {
+
+        release();
+
+    }
 }
 
 module.exports = {
